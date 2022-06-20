@@ -11,13 +11,16 @@ $Step = "Step3"
 #File we are working with?
 $File = "C:\Users\atrei\OneDrive - Telstra\Customers\BlueScope\TCO\batches\Telstra Port_Monday 20 June 2022_ All.csv"
 
+#User Type that we are migrating (Users or MeetingRooms currently supported)
+$UserType = "Users"
+
 
 ###Per Customer Settings###
 
 #Folder containing migration batches?
 $Folder = "C:\Users\atrei\OneDrive - Telstra\Customers\BlueScope\TCO\Batches"
 
-#Mode (DirectRouting or TCO)
+#Mode (DirectRouting or TCO (Operator Connect and Calling Plans in the future))
 $Mode = "TCO"
 
 #Hosted Migration URL
@@ -44,5 +47,6 @@ $VerbosePreference = "SilentlyContinue"
 
 Invoke-Expression ($PSCommandPath -replace 'Migrate-SkypeUsersToTeams.ps1','Migrate-SkypeUsersToTeamsWorker.ps1')
 
-#Clear the URL variable so the direct run check fails.
-Remove-Variable url
+#Clear the variables in memory so the direct run check fails.
+Remove-Variable url, step, file, usertype, folder, mode, frontend, authmethod, UcmPsTools
+

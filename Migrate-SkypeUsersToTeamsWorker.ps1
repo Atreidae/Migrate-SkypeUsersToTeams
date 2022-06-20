@@ -30,11 +30,11 @@ If ($url -notlike "http*")
 
 #All stages
 
-#log location
+##log file location
 $LogFileLocation =  $PSCommandPath -replace '.ps1','.log' #Where do we store the log files? (In the same folder by default)
 
 
-Write-host "INFO: Importing Functions" -ForegroundColor Green
+Write-host "INFO: Importing UcmPsTools Functions" -ForegroundColor Green
 
 . $UcmPsTools  #Dot Source
 
@@ -46,7 +46,7 @@ cd $Folder
 Try {$users = Import-CSV $File -ErrorAction Stop} 
 Catch
 {
-  Write-Warning "Couldnt import CSV"
+  Write-Warning "Couldnt import CSV, Exiting"
   return
 }
 
@@ -66,78 +66,112 @@ If ($step -eq "Step1")
   $startTime = get-date 
   $usercount = ($users.count)
   $currentuser = 0
+  
+  #Check we are connected to MSOL
+  $return = (Test-UcmMSOLConnection)
+  if ($return.status -eq "Error")
+  {
+   Write-UcmLog -message "We arent connected to MSOL Service. Please run Connect-MsolService and try again" -Severity 3
+   Return
+  }
 
   #Process Each User
-  Foreach ($username in $users) { 
+  :Step1Loop Foreach ($username in $users) 
+  { 
     $currentuser ++
     $usernametxt = $Username.UserPrincipalName #Remove the CSV header
     
-    Write-Progress -Activity "Step 1" -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)
+    Write-Progress -Activity "Step 1" -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
   
-    
-  
-    #figure out of the user has voice or not.
+    #Figure out of the user has voice or not.
     $voice = $true
     if ($Username.lineuri.Length -le 2) 
     {
-      Write-UcmLog -message "No phone number, disabling voice features" -Severity 2
+      Write-UcmLog -message "No phone number, skipping voice features" -Severity 2
       $voice = $false
     }
+    
     New-UCMReportItem -LineTitle "Username" -LineMessage "$usernametxt"
     Write-UcmLog -message "User $usernametxt" -Severity 2
     [hashtable]$User = @{}
     $User.UPN = "$usernametxt"
-    #$VerbosePreference = Continue
-
-
+    
+    
+    ##Todo## Add a check to see if the user exists and exit early if not.
+    ##Continue Step1Loop
 
 
     #Apps and licences
     Write-Progress -Activity "Step 1" -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation Licences -PercentComplete ((($currentuser) / $usercount) * 100)
     #Licences
-  
-    #Meetingrooms
-    #$step = (Grant-UcmOffice365UserLicence -upn $user.upn -LicenceType 'MCOPSTNEAU2' -Country 'AU')
-    #New-UcmReportStep -Stepname "Meeting Licence" -StepResult "$($Step.status) $($step.message)"
-
-    If ($voice) 
-    { 
-      #Enterprise Voice
-      $step = (Grant-UcmOffice365UserLicence -upn $user.upn -LicenceType 'MCOEV' -Country 'AU')
-      New-UcmReportStep -Stepname "EV Licence" -StepResult "$($Step.status) $($step.message)"
-
-      #Telstra Calling
-      $step = (Grant-UcmOffice365UserLicence -upn $user.upn -LicenceType 'MCOPSTNEAU2' -Country 'AU')
-      New-UcmReportStep -Stepname "TCO Licence" -StepResult "$($Step.status) $($step.message)"
-    }
-    else
+    If ($UserType -eq "Users")
     {
-      New-UcmReportStep -Stepname "EV Licence" -StepResult "Skipped"
-      New-UcmReportStep -Stepname "TCO Licence" -StepResult "Skipped"
-    }
+    
+      If ($voice) 
+      { 
+        #Enterprise Voice
+        $step = (Grant-UcmOffice365UserLicence -upn $user.upn -LicenceType 'MCOEV' -Country 'AU')
+        New-UcmReportStep -Stepname "EV Licence" -StepResult "$($Step.status) $($step.message)"
 
+        If ($mode -eq "TCO")
+        {
+          #Telstra Calling
+          $step = (Grant-UcmOffice365UserLicence -upn $user.upn -LicenceType 'MCOPSTNEAU2' -Country 'AU')
+          New-UcmReportStep -Stepname "TCO Licence" -StepResult "$($Step.status) $($step.message)"
+        }
+      }
+      
+      Else
+      {
+        New-UcmReportStep -Stepname "EV Licence" -StepResult "Skipped"
+        New-UcmReportStep -Stepname "TCO Licence" -StepResult "Skipped"
+      }
+    }
+    
+    ElseIf ($UserType -eq "MeetingRooms")
+    {
+      $step = (Grant-UcmOffice365UserLicence -upn $user.upn -LicenceType 'MCOPSTNEAU2' -Country 'AU')
+      New-UcmReportStep -Stepname "Meeting Licence" -StepResult "$($Step.status) $($step.message)"
+    }
+  
+  
     #ServicePlans
 
     Write-Progress -Activity "Step 1" -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation ServicePlans -PercentComplete ((($currentuser) / $usercount) * 100)
-
-    #Teams
-    $step = (Enable-UcmO365Service -upn $user.upn -ServiceName TEAMS1)
-    New-UcmReportStep -Stepname "Teams Service Plan" -StepResult "$($Step.status) $($step.message)"
-
-    if ($voice) 
+    If ($UserType -eq "Users")
     {
+      #Teams Service Plan
+      $step = (Enable-UcmO365Service -upn $user.upn -ServiceName TEAMS1)
+      New-UcmReportStep -Stepname "Teams Service Plan" -StepResult "$($Step.status) $($step.message)"
+
+    
+      #Skype for Business Online Service Plan (Required to Migrate User from OnPrem to Online
+      $step = (Enable-UcmO365Service -upn $user.upn -ServiceName MCOSTANDARD)
+      New-UcmReportStep -Stepname "SFBO Service Plan" -StepResult "$($Step.status) $($step.message)"
+
+      #We check the voice mode before checking if we are doing voice at all so we can inject the skipped message in the right header.
+
       #Telstra Calling
-      $step = (Enable-UcmO365Service -upn $user.upn -ServiceName MCOPSTNEAU)
-      New-UcmReportStep -Stepname "TCO Service Plan" -StepResult "$($Step.status) $($step.message)"
-    }
-    Else
-    {
-      New-UcmReportStep -Stepname "TCO Service Plan" -StepResult "Skipped"
-    }
+      if ($mode -eq "TCO") 
+      {
+        #Voice Licence
+        if ($voice) 
+        {
+          $step = (Enable-UcmO365Service -upn $user.upn -ServiceName MCOPSTNEAU)
+          New-UcmReportStep -Stepname "TCO Service Plan" -StepResult "$($Step.status) $($step.message)"
+        }
+        Else
+        {
+          New-UcmReportStep -Stepname "TCO Service Plan" -StepResult "Skipped"
+        }
+      }
 
-    #Skype for Business Online
-    $step = (Enable-UcmO365Service -upn $user.upn -ServiceName MCOSTANDARD)
-    New-UcmReportStep -Stepname "SFBO Service Plan" -StepResult "$($Step.status) $($step.message)"
+      if ($mode -eq "DirectRouting") 
+      {
+        Write-UcmLog -message "Direct Routing - Skip Voice Service Plan" -Severity 1
+      }
+
+    }
 
     #Calculate Statistics
     $elapsedTime = $(get-date) - $startTime 
@@ -148,68 +182,111 @@ If ($step -eq "Step1")
     $estimatedCompletionTime = $startTime + $estimatedTotalSecondsTS
     #Give us a human readable time
     $eta = ($estimatedTotalSecondsTS.ToString("hh\:mm\:ss"))
-
   }
+
   New-UCMReportItem -LineTitle "Username" -LineMessage "Complete"
-  Export-UcmHTMLReport
-  Export-UcmCSVReport
+  $finished = (get-date -DisplayHint Time)
+  Write-host "Finished at $finished"
+  Export-UcmHTMLReport | out-null
+  Export-UcmCSVReport | out-null
 }
 
 If ($step -eq "Step2")
 {
-  #Check to see if we have the Skype4B Management Tools
-  $Return = (Import-UcmCsOnPremTools)
-  If ($Return.status -eq "Error")
+#Check to see if we have the Skype4B Management Tools
+$Return = (Import-UcmCsOnPremTools)
+If ($Return.status -eq "Error")
+{
+  Write-Warning "Step 2 must be performed from an On-prem server with the Skype4B tools installed "
+  Return
+}
+
+#Setup Reporting and Progress Bars
+Initialize-UcmReport -Title "Step 2" -Subtitle "Old Policy Removal/User Migration to O365"
+  
+$maxI = 250 
+$startTime = get-date 
+$usercount = ($users.count)
+$currentuser = 0
+  
+#Process Each User
+:Step2Loop Foreach ($username in $users) { 
+  $currentuser ++
+  $usernametxt = $Username.UserPrincipalName #Remove the CSV header
+  New-UCMReportItem -LineTitle "Username" -LineMessage "$usernametxt"
+  Write-Progress -CurrentOperation "Init" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+
+  Write-UcmLog -message "User $usernametxt" -Severity 2
+  [hashtable]$User = @{}
+
+
+  #AD Check
+  Write-Progress -CurrentOperation "Find User" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+   
+  $UserAD = $null
+  $UserAD = (Get-csaduser -Identity $usernametxt)
+  $CsUser = (Get-csaduser -Identity $usernametxt|Get-csuser)
+    
+  If ($UserAD -eq $null) 
+
   {
-    Write-Warning "Step 2 must be performed from an On-prem server with the Skype4B tools installed "
-    Return
+    Write-UcmLog -message "Cant find on prem $usernametxt" -Severity 3
+    New-UcmReportStep -Stepname "AD Account" -StepResult "Error: Couldnt Locate AD Account"
+    Continue Step2loop #exit foreach loop
+
+  }
+  Else
+  { 
+    New-UcmReportStep -Stepname "AD Account" -StepResult "OK: AD Account Found"
+    $User.UPN = $usernametxt
   }
 
-  #Setup Reporting and Progress Bars
-  Initialize-UcmReport -Title "Step 2" -Subtitle "Old Policy Removal/User Migration to O365"
-  
-  $maxI = 250 
-  $startTime = get-date 
-  $usercount = ($users.count)
-  $currentuser = 0
-  
-  #Process Each User
-  Foreach ($username in $users) { 
-    $currentuser ++
-    $usernametxt = $Username.UserPrincipalName #Remove the CSV header
-    Write-Progress -CurrentOperation "Init" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+  #Check to see if the user is actually on prem
 
-    Write-UcmLog -message "User $usernametxt" -Severity 2
-    [hashtable]$User = @{}
+  If ($CsUser.hostingprovider -NE "SRV:")
+  {
+    Write-UcmLog -message "User doesnt appear to be homed in Skype4B on-prem" -Severity 3
+    New-UcmReportStep -Stepname "Skype Account Check" -StepResult "Error: User doesnt appear to be hosted on-prem"
+    New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Skipped"
+    New-UcmReportStep -Stepname "Move User to O365" -StepResult "Skipped"
+    Continue Step2Loop
+  }
+  Else
+  {
+    Write-UcmLog -message "Found Skype Account On-Prem" -Severity 2
+    New-UcmReportStep -Stepname "Skype Account Check" -StepResult "OK"
+  }
 
-
-    #AD Check
-    
-    Write-Progress -CurrentOperation "Find User" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
-
-
-    $userad = $null
-    $UserAD = (Get-csaduser -Identity $usernametxt)
-    $Csuser = (Get-csaduser -Identity $usernametxt|Get-csuser)
-
-
-    If ($userad -eq $null) 
-
-    {
-      Write-UcmLog -message "Cant find on prem $usernametxt" -Severity 3
-      Continue Userloop #exit foreach loop
-
-    }
-
-    $User.UPN = $usernametxt
-
-
-    Write-Progress -CurrentOperation "Clear User Attributes" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
-
-
-    #Clear Local attributes
+  #Remove all those pesky policies that can only be set on-prem before moving the user to the cloud
+  Write-Progress -CurrentOperation "Clear Skype Policies" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+        
+  #Clear Skype4B attributes that can be difficult to remove later. 
+  #These dont affect Teams and can stop a Skype4B FrontEnd from being decommisioned.
+  Try
+  {
+    Write-UcmLog -message "Removing Skype Policies from user" -Severity 2
     SkypeForBusiness\Set-CsUser -Identity $csuser.sipaddress -LineUri $null -EnterpriseVoiceEnabled $False 
-    #SkypeForBusiness\Set-CsUser -Identity $csuser -LineUri $null -EnterpriseVoiceEnabled $False 
+    SkypeForBusiness\Grant-CsPresencePolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsLocationPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsClientPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsClientVersionPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsArchivingPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsPinPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsExternalAccessPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsMobilityPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsPersistentChatPolicy -Identity $csuser.sipaddress -PolicyName $null
+    SkypeForBusiness\Grant-CsCallViaWorkPolicy -Identity $csuser.sipaddress -PolicyName $null
+    New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "OK"
+   }
+   Catch
+   {
+    New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Error: $error[0]"
+    Write-UcmLog -message "Something went wrong stripping Skype Policies from user $usernametxt" -Severity 2
+    Write-UcmLog -message "$Error[0]" -Severity 2
+   }
+    
+
+
     #Move the user to O365
     IF ((Get-CsAduser $usernametxt).enabled -eq $null) {Write-Warning "User is not enabled on prem"}
 
@@ -218,8 +295,6 @@ If ($step -eq "Step2")
 
     Write-Progress -CurrentOperation "Move user" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
 
-    #If (NotExist $foo) {
-    #$foo = (get-Credential)
     Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool tccsfbpoolnsw.steel.bhpsteel.net -BypassAudioConferencingCheck -Credential $foo #-UseOAuth
     #Move-CsMeetingRoom -Identity $user.upn -Target sipfed.online.lync.com -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool sfbfeprd.agl.com.au -UseOAuth -Credential $foo
 
@@ -236,8 +311,10 @@ If ($step -eq "Step2")
     $eta = ($estimatedTotalSecondsTS.ToString("hh\:mm\:ss"))
   }
   New-UCMReportItem -LineTitle "Username" -LineMessage "Complete"
-  Export-UcmHTMLReport
-  Export-UcmCSVReport
+  $finished = (get-date -DisplayHint Time)
+  Write-host "Finished at $finished"
+  Export-UcmHTMLReport | out-null
+  Export-UcmCSVReport | out-null
   
 }
 
