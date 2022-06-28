@@ -9,7 +9,7 @@
 $Step = "Step3" 
 
 #File we are working with?
-$File = "C:\Users\atrei\OneDrive - Telstra\Customers\BlueScope\TCO\batches\Telstra Port_Monday 20 June 2022_ All.csv"
+$File = "C:\Users\atrei\OneDrive - Telstra\Customers\BlueScope\TCO\batches\21-06-22b.csv"
 
 #User Type that we are migrating (Users or MeetingRooms currently supported)
 $UserType = "Users"

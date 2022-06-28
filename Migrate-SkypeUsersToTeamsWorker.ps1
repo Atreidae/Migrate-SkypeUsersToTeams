@@ -193,97 +193,164 @@ If ($step -eq "Step1")
 
 If ($step -eq "Step2")
 {
-#Check to see if we have the Skype4B Management Tools
-$Return = (Import-UcmCsOnPremTools)
-If ($Return.status -eq "Error")
-{
-  Write-Warning "Step 2 must be performed from an On-prem server with the Skype4B tools installed "
-  Return
-}
+  #Check to see if we have the Skype4B Management Tools
+  $Return = (Import-UcmCsOnPremTools)
+  If ($Return.status -eq "Error")
+  {
+    Write-Warning "Step 2 must be performed from an On-prem server with the Skype4B tools installed "
+    Return
+  }
 
-#Setup Reporting and Progress Bars
-Initialize-UcmReport -Title "Step 2" -Subtitle "Old Policy Removal/User Migration to O365"
+  #Setup Reporting and Progress Bars
+  Initialize-UcmReport -Title "Step 2" -Subtitle "Old Policy Removal/User Migration to O365"
   
-$maxI = 250 
-$startTime = get-date 
-$usercount = ($users.count)
-$currentuser = 0
+  $maxI = 250 
+  $startTime = get-date 
+  $usercount = ($users.count)
+  $currentuser = 0
   
-#Process Each User
-:Step2Loop Foreach ($username in $users) { 
-  $currentuser ++
-  $usernametxt = $Username.UserPrincipalName #Remove the CSV header
-  New-UCMReportItem -LineTitle "Username" -LineMessage "$usernametxt"
-  Write-Progress -CurrentOperation "Init" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+  #Setup Authentication
+  
+  #Used when the customers environment doesnt support OAUTH and the FrontEnd sever doesnt have access to the Office365 login pages. 
+  #Can also store creds in a local file
+  #Does not Support MFA!
+  If ($AuthMethod -eq "Credentials")
+  {
+    #Check we have creds in memory, if not check for cred.xml, failing that prompt the user and store them.
+    If ($Global:Config.SignInAddress -eq $null)
+    {
+      Write-UcmLog -Message "No Credentials stored in Memory, checking for Creds file" -Severity 2 -Component $function
+      $CredsPath =  $PSCommandPath -replace 'Migrate-SkypeUsersToTeamsWorker.ps1','cred.xml'
+      If(!(Test-Path $CredsPath)) 
+      {
+        Write-UcmLog -component $function -Message 'Could not locate creds file' -severity 2
 
-  Write-UcmLog -message "User $usernametxt" -Severity 2
-  [hashtable]$User = @{}
+        #Create a new creds variable
+        $null = (Remove-Variable -Name Config -Scope Global -ErrorAction SilentlyContinue)
+        $global:Config = @{}
+
+        #Prompt user for creds
+        $Global:Config.SignInAddress = (Read-Host -Prompt "Username")
+        $Global:Config.Password = (Read-Host -Prompt "Password")
+        $Global:Config.Override = (Read-Host -Prompt "OverrideDomain (Blank for none)")
+
+        #Encrypt the creds
+        $global:Config.Credential = ($Global:Config.Password | ConvertTo-SecureString -AsPlainText -Force)
+        Remove-Variable -Name "Config.Password" -Scope "Global" -ErrorAction SilentlyContinue
+
+        #write a secure creds file
+        $Global:Config | Export-Clixml -Path $CredsPath
+              }
+      Else
+      {
+        Write-UcmLog -component $function -Message 'Importing Credentials File' -severity 2
+        $global:Config = @{}
+        $global:Config = (Import-Clixml -Path $CredsPath)
+        Write-UcmLog -component $function -Message 'Creds Loaded' -severity 2
+      }
+    }
+
+	#Get the creds ready for the module
+
+	$global:StoredPsCred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ($global:Config.SignInAddress, $global:Config.Credential)
+	($global:StoredPsCred).Password.MakeReadOnly() #Stop modules deleting the variable.
+  
+  
+  }
+  #Used when we want to force O365 to use OAuth, will attempt to authenticate using SSO, then failback to a login prompt
+  Elseif ($AuthMethod -eq "OAuth")
+  {
+  
+  }
+  #Dont specify anything in the move-Csuser cmdlet. Invokes the O365 Login prompt (supports MFA)
+  Elseif ($AuthMethod -eq "Prompt")
+  {
+  
+  }
+  #Process Each User
+  :Step2Loop Foreach ($username in $users) { 
+    $currentuser ++
+    $usernametxt = $Username.UserPrincipalName #Remove the CSV header
+    New-UCMReportItem -LineTitle "Username" -LineMessage "$usernametxt"
+    Write-Progress -CurrentOperation "Init" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+
+    Write-UcmLog -message "User $usernametxt" -Severity 2
+    [hashtable]$User = @{}
 
 
-  #AD Check
-  Write-Progress -CurrentOperation "Find User" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+    #AD Check
+    Write-Progress -CurrentOperation "Find User" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
    
-  $UserAD = $null
-  $UserAD = (Get-csaduser -Identity $usernametxt)
-  $CsUser = (Get-csaduser -Identity $usernametxt|Get-csuser)
+    $UserAD = $null
+    $UserAD = (Get-csaduser -Identity $usernametxt)
+    $CsUser = (Get-csaduser -Identity $usernametxt|Get-csuser)
     
-  If ($UserAD -eq $null) 
+    If ($UserAD -eq $null) 
 
-  {
-    Write-UcmLog -message "Cant find on prem $usernametxt" -Severity 3
-    New-UcmReportStep -Stepname "AD Account" -StepResult "Error: Couldnt Locate AD Account"
-    Continue Step2loop #exit foreach loop
+    {
+      Write-UcmLog -message "Cant find on prem $usernametxt" -Severity 3
+      New-UcmReportStep -Stepname "AD Account" -StepResult "Error: Couldnt Locate AD Account"
+      New-UcmReportStep -Stepname "Skype Account Check" -StepResult "Skipped"
+      New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Skipped"
+      New-UcmReportStep -Stepname "Move User to O365" -StepResult "Skipped"
+      Continue Step2loop #exit foreach loop
 
-  }
-  Else
-  { 
-    New-UcmReportStep -Stepname "AD Account" -StepResult "OK: AD Account Found"
-    $User.UPN = $usernametxt
-  }
+    }
+    Else
+    { 
+      New-UcmReportStep -Stepname "AD Account" -StepResult "OK: AD Account Found"
+      $User.UPN = $usernametxt
+    }
 
-  #Check to see if the user is actually on prem
+    #Check to see if the user is actually on prem
 
-  If ($CsUser.hostingprovider -NE "SRV:")
-  {
-    Write-UcmLog -message "User doesnt appear to be homed in Skype4B on-prem" -Severity 3
-    New-UcmReportStep -Stepname "Skype Account Check" -StepResult "Error: User doesnt appear to be hosted on-prem"
-    New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Skipped"
-    New-UcmReportStep -Stepname "Move User to O365" -StepResult "Skipped"
-    Continue Step2Loop
-  }
-  Else
-  {
-    Write-UcmLog -message "Found Skype Account On-Prem" -Severity 2
-    New-UcmReportStep -Stepname "Skype Account Check" -StepResult "OK"
-  }
+    If ($CsUser.hostingprovider -NE "SRV:")
+    {
+      Write-UcmLog -message "User doesnt appear to be homed in Skype4B on-prem" -Severity 3
+      New-UcmReportStep -Stepname "Skype Account Check" -StepResult "Error: User doesnt appear to be hosted on-prem"
+      New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Skipped"
+      New-UcmReportStep -Stepname "Move User to O365" -StepResult "Skipped"
+      Continue Step2Loop
+    }
+    Else
+    {
+      Write-UcmLog -message "Found Skype Account On-Prem" -Severity 2
+      New-UcmReportStep -Stepname "Skype Account Check" -StepResult "OK"
+    }
 
-  #Remove all those pesky policies that can only be set on-prem before moving the user to the cloud
-  Write-Progress -CurrentOperation "Clear Skype Policies" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
+    #Remove all those pesky policies that can only be set on-prem before moving the user to the cloud
+    Write-Progress -CurrentOperation "Clear Skype Policies" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
         
-  #Clear Skype4B attributes that can be difficult to remove later. 
-  #These dont affect Teams and can stop a Skype4B FrontEnd from being decommisioned.
-  Try
-  {
-    Write-UcmLog -message "Removing Skype Policies from user" -Severity 2
-    SkypeForBusiness\Set-CsUser -Identity $csuser.sipaddress -LineUri $null -EnterpriseVoiceEnabled $False 
-    SkypeForBusiness\Grant-CsPresencePolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsLocationPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsClientPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsClientVersionPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsArchivingPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsPinPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsExternalAccessPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsMobilityPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsPersistentChatPolicy -Identity $csuser.sipaddress -PolicyName $null
-    SkypeForBusiness\Grant-CsCallViaWorkPolicy -Identity $csuser.sipaddress -PolicyName $null
-    New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "OK"
-   }
-   Catch
-   {
-    New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Error: $error[0]"
-    Write-UcmLog -message "Something went wrong stripping Skype Policies from user $usernametxt" -Severity 2
-    Write-UcmLog -message "$Error[0]" -Severity 2
-   }
+    #Clear Skype4B attributes that can be difficult to remove later. 
+    #These dont affect Teams and can stop a Skype4B FrontEnd from being decommisioned.
+    Try
+    {
+      Write-UcmLog -message "Removing Skype Policies from user" -Severity 2
+      #Supress all the "We didnt change anything warnings (Store the old preference so we respect the users setting)
+      $OldWarningpref = $WarningPreference
+      $WarningPreference = "SilentlyContinue"
+      SkypeForBusiness\Set-CsUser -Identity $csuser.sipaddress -LineUri $null -EnterpriseVoiceEnabled $False 
+      SkypeForBusiness\Grant-CsPresencePolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsLocationPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsClientPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsClientVersionPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsArchivingPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsPinPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsExternalAccessPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsMobilityPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsPersistentChatPolicy -Identity $csuser.sipaddress -PolicyName $null
+      SkypeForBusiness\Grant-CsCallViaWorkPolicy -Identity $csuser.sipaddress -PolicyName $null
+      
+      #Restore the old Warning Perference
+      $WarningPreference = $OldWarningpref
+      New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "OK"
+      }
+      Catch
+      {
+      New-UcmReportStep -Stepname "Clear Skype Policies" -StepResult "Error: $error[0]"
+      Write-UcmLog -message "Something went wrong stripping Skype Policies from user $usernametxt" -Severity 3
+      Write-UcmLog -message "$Error[0]" -Severity 3
+      }
     
 
 
@@ -295,7 +362,38 @@ $currentuser = 0
 
     Write-Progress -CurrentOperation "Move user" -Activity "Step 2" -Status "User $currentuser of $usercount. $Usernametxt, ETA: $eta / @ $estimatedCompletionTime"  -PercentComplete ((($currentuser) / $usercount) * 100)
 
-    Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool tccsfbpoolnsw.steel.bhpsteel.net -BypassAudioConferencingCheck -Credential $foo #-UseOAuth
+    Try
+    {
+    
+      #Used when the customers environment doesnt support OAUTH and the FrontEnd sever doesnt have access to the Office365 login pages. 
+      #Can also store creds in a local file
+      #Does not Support MFA!
+      If ($AuthMethod -eq "Credentials")
+      {
+        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -Credential $global:StoredPsCred
+      }
+      #Used when we want to force O365 to use OAuth, will attempt to authenticate using SSO, then failback to a login prompt
+      Elseif ($AuthMethod -eq "OAuth")
+      {
+  
+      }
+      #Dont specify anything in the move-Csuser cmdlet. Invokes the O365 Login prompt (supports MFA)
+      Elseif ($AuthMethod -eq "Prompt")
+      {
+  
+      }
+
+      New-UcmReportStep -Stepname "Move User to O365" -StepResult "OK"
+    }
+    Catch
+    {
+    
+      New-UcmReportStep -Stepname "Move User to O365" -StepResult "Error: $error[0]"
+      Write-UcmLog -message "Something went wrong moving user $usernametxt to Office365" -Severity 3
+      Write-UcmLog -message "$Error[0]" -Severity 3
+    
+    }
+    
     #Move-CsMeetingRoom -Identity $user.upn -Target sipfed.online.lync.com -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool sfbfeprd.agl.com.au -UseOAuth -Credential $foo
 
 
