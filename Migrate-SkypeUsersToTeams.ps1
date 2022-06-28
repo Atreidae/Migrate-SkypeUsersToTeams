@@ -6,7 +6,7 @@
 ###Per Run Settings###
 
 #Step to run (Step1, Step2, Step3 currently supported)
-$Step = "Step3" 
+$Step = "Step1" 
 
 #File we are working with?
 $File = "C:\Users\atrei\OneDrive - Telstra\Customers\BlueScope\TCO\batches\21-06-22b.csv"

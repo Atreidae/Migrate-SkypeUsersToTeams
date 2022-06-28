@@ -3,3 +3,5 @@ cred.xml
 *.html
 *.lo_
 .vscode/settings.json
+Migrate-SkypeUsersToTeams-agl.ps1
+Migrate-SkypeUsersToTeams-bsl.ps1
