@@ -1,0 +1,5 @@
+These files are generated at the time of migration
+
+Step 1 is the pre migration checks, licencing etc.
+Step 2 is moving users from Skype to Teams.
+Step 3 is assigning numbers and policies after moving users.

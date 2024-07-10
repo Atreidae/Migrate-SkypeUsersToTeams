@@ -1,0 +1,7 @@
+#TYPE System.Management.Automation.PSCustomObject
+"Username","ItemNumber","AD Account","Skype Account Check","Clear Skype Policies","Move User to O365","Time"
+"Princess.Luna@ucmadscientist.com","1","OK: AD Account Found","OK","OK","OK","09/30/2022 16:08:16"
+"Button.Mash@ucmadscientist.com","2","OK: AD Account Found","OK","OK","OK","09/30/2022 16:08:18"
+"Discord@ucmadscientist.com","3","OK: AD Account Found","OK","OK","OK","09/30/2022 16:08:24"
+"Cheese.Sandwhich@ucmadscientist.com","4","OK: AD Account Found","OK","OK","OK","09/30/2022 16:08:29"
+"TheGreatAndPowerful.Trixie@ucmadscientist.com","5","OK: AD Account Found","OK","OK","OK","09/30/2022 16:08:34"

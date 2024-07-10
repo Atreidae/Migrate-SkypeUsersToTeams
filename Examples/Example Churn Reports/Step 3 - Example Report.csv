@@ -1,0 +1,7 @@
+#TYPE System.Management.Automation.PSCustomObject
+"Username","ItemNumber","Locate Sip Address","Upgrade Policy","Dialplan","LineURI","Time"
+"Princess.Luna@ucmadscientist.com","1","sip:Princess.Luna@ucmadscientist.com","OK","OK, AUS-WA-SA-NT-08","OK, +6170105202","09/30/2022 16:39:21"
+"Button.Mash@ucmadscientist.com,"2","Error, unknown error You cannot call a method on a null-valued expression.","Skipped","Skipped","Skipped","09/30/2022 16:39:22"
+"Discord@ucmadscientist.com","3","sip:Discord@ucmadscientist.com","OK","OK, AUS-WA-SA-NT-08","OK, +61870105205","09/30/2022 16:39:31"
+"Cheese.Sandwhich@ucmadscientist.com,"4","sip:Cheese.Sandwhich@ucmadscientist.com","OK","OK, AUS-WA-SA-NT-08","OK, +61870105206","09/30/2022 16:39:39"
+"TheGreatAndPowerful.Trixie@ucmadscientist.com","5","sip:TheGreatAndPowerful.Trixie@ucmadscientist.com","OK","OK, AUS-WA-SA-NT-08","OK, +61870105228","09/30/2022 16:39:50"

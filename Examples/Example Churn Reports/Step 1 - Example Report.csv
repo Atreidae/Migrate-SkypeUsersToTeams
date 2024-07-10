@@ -1,0 +1,7 @@
+#TYPE System.Management.Automation.PSCustomObject
+"Username","ItemNumber","EV Licence","TCO Licence","Teams Service Plan","SFBO Service Plan","TCO Service Plan","Time"
+"Princess.Luna@ucmadscientist.com","1","OK Skipped: Already Licenced","Warning Licence Granted, Warning Message Low Licence Count","OK Already Enabled","OK Already Enabled","OK Already Enabled","09/30/2022 15:23:58"
+"Button.Mash@ucmadscientist.com","2","OK Licence Granted","Warning Licence Granted, Warning Message Low Licence Count","OK Already Enabled","OK Already Enabled","OK Already Enabled","06/24/2022 10:41:11"
+"Discord@ucmadscientist.com","3","Error User Not Found","Error User Not Found","Error User has no O365 licence, run 'Get-MsolUser -UserPrincipalName discord@ucmadscientist.com' for more info","Error User has no O365 licence, run 'Get-MsolUser -UserPrincipalName discord@ucmadscientist.com' for more info","Error User has no O365 licence, run 'Get-MsolUser -UserPrincipalName discord@ucmadscientist.com' for more info","09/30/2022 15:24:05"
+"Cheese.Sandwhich@ucmadscientist.com", "4","OK Skipped: Already Licenced","OK Skipped: Already Licenced","OK Already Enabled","OK Already Enabled","OK Already Enabled","19.05.22.04.21"
+"TheGreatAndPowerful.Trixie@ucmadscientist.com", "5", "OK Skipped: Already Licenced","OK Skipped: Already Licenced","OK Already Enabled","OK Already Enabled","OK Already Enabled","05.05.22.04.02"
