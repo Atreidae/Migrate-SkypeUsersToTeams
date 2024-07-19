@@ -9,7 +9,7 @@
 $Step = "Step1" 
 
 #File we are working with?
-$File = "C:\Users\atrei\OneDrive - Telstra\Customers\Programmed\Batches\11-07-24.csv"
+$File = "C:\Users\atrei\OneDrive - Telstra\Customers\Programmed\Batches\25-07-24a.csv"
 
 #User Type that we are migrating (Users or MeetingRooms currently supported)
 $UserType = "Users"
@@ -18,7 +18,7 @@ $UserType = "Users"
 ###Per Customer Settings###
 
 #Folder containing migration batches?
-$Folder = "C:\Users\atrei\OneDrive - Telstra\Customers\Programmed\Batches"
+$Folder = "C:\Kloud\Batches"
 
 #Mode (DirectRouting or TCO (Operator Connect and Calling Plans in the future))
 $Mode = "MSOC"
@@ -27,13 +27,13 @@ $Mode = "MSOC"
 $url="https://adminau1.online.lync.com/HostedMigration/hostedmigrationService.svc"
 
 #FrontEnd server (Step 2 only)
-$frontEnd = "aumelsfb01.ucmadscientist.com"
+$frontEnd = "sfb-fe-au-east.programmed.com.au"
 
 #Step2 Authentcation Method (OAuth or Credentials)
-$AuthMethod = "Credentials"
+$AuthMethod = "prompt"
 
 #UcmPSTools Location 
-$UcmPsTools = "C:\UcMadScientist\PowerShell-Functions\Test-ImportFunctions.ps1"
+$UcmPsTools = "C:\Kloud\PowerShell-Functions\Test-ImportFunctions.ps1"
 
 #Skip Assignment of Licences / Service Plan(Step 1 only)?
 $ReportOnly = $true

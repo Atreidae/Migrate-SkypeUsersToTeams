@@ -73,11 +73,12 @@ if ($Step -eq 'Step0')
 
   #Okay first we need to calculate the number ranges from the supplied spreadsheet
   $ranges = @()
-  $onpremUsers = @()
+  $FoundonpremUsers = @()
+  $MissingonpremUsers = @()
 
-  $users | ForEach-Object 
+  Foreach ($user in $users) 
   {
-    $ranges += ($_.lineuri.substring(0,($_.lineuri.Length - 2)))
+    $ranges += ($user.lineuri.substring(5,($user.lineuri.Length - 7)))
   }
   #prune the duplicates
   $ranges = $ranges | Select-Object -Unique
@@ -87,7 +88,10 @@ if ($Step -eq 'Step0')
   Foreach ($range in $ranges)
   {
     Write-UcmLog -message "Locating Onprem Users for $range" -Severity 2
-    $return = (Search-UcmCsOnPremNumberRange -start ("$range"+"00") -end ("$range"+"99"))
+    $Start = ("$range"+"00")
+    $End = ("$range"+"99")
+
+    $return = (Search-UcmCsOnPremNumberRange -start $start -end $end)
     If ($return.status -eq 'Error')
     {
       Write-UcmLog -message "Something went wrong pulling the number range from onprem" -Severity 3
@@ -116,9 +120,8 @@ if ($Step -eq 'Step0')
   #This isnt effecent, but it works  ##todo was here
   $currentuser ++
   $usernametxt = $onpremuser.SipAddress #Remove the CSV header
-  
   Write-Progress -Activity 'Step 1' -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
-  {
+  Write-UcmLog -message "On-Prem User $usernametxt" -Severity 2
     $found = $false
     :Step0Loop foreach ($user in $users)
     {
@@ -130,7 +133,8 @@ if ($Step -eq 'Step0')
     }
     if ($found -eq $false)
     {
-      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) '$($onpremuser.sipaddress) not found in CSV" -Severity 3
+      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) '$($onpremuser.sipaddress) not found in CSV!" -Severity 3
+      $MissingonpremUsers += $onpremuser
     }
 
     
@@ -143,12 +147,12 @@ if ($Step -eq 'Step0')
     $estimatedCompletionTime = $startTime + $estimatedTotalSecondsTS
     #Give us a human readable time
     $eta = ($estimatedTotalSecondsTS.ToString('hh\:mm\:ss'))
+}# end of Foreach User look
 
+# now display the results
+Write-Host 'On-Prem Users not found in CSV'
+$MissingonpremUsers | ft displayname, sipaddress, lineuri
 
-
-  }
-
-}
 }#end of step0
 
 If ($step -eq 'Step1')
@@ -394,6 +398,16 @@ If ($step -eq 'Step2')
       Continue Step2loop #exit foreach loop
 
     }
+    Elseif ($UserAD.UserAccountControl -match 'AccountDisabled') 
+    {
+     Write-UcmLog -message "$usernametxt has a disabled AD account" -Severity 3
+      New-UcmReportStep -Stepname 'AD Account' -StepResult 'Error: Account Disabled'
+      New-UcmReportStep -Stepname 'Skype Account Check' -StepResult 'Skipped'
+      New-UcmReportStep -Stepname 'Clear Skype Policies' -StepResult 'Skipped'
+      New-UcmReportStep -Stepname 'Move User to O365' -StepResult 'Skipped'
+      Continue Step2loop #exit foreach loop
+    }
+
     Else
     { 
       New-UcmReportStep -Stepname 'AD Account' -StepResult 'OK: AD Account Found'
@@ -468,17 +482,17 @@ If ($step -eq 'Step2')
       #Does not Support MFA!
       If ($AuthMethod -eq 'Credentials')
       {
-        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -Credential $global:StoredPsCred
+        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -Credential $global:StoredPsCred -force
       }
       #Used when we want to force O365 to use OAuth, will attempt to authenticate using SSO, then failback to a login prompt
       Elseif ($AuthMethod -eq 'OAuth')
       {
-  
+           Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -UseLegacyMode -force
       }
       #Dont specify anything in the move-Csuser cmdlet. Invokes the O365 Login prompt (supports MFA)
       Elseif ($AuthMethod -eq 'Prompt')
       {
-  
+        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -force
       }
 
       New-UcmReportStep -Stepname 'Move User to O365' -StepResult 'OK'
