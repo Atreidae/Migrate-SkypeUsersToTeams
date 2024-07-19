@@ -5,6 +5,10 @@
 
 
 <#Change log
+    19/07/24
+    Step 0 support
+    Added pre migration checking, checks number ranges for missing users, and validates that the acounts are good to move.
+
     15/09/22
     Fixed reporting for Step 1 reporting simply "Skipped" for non-voice users.
 
@@ -73,11 +77,12 @@ if ($Step -eq 'Step0')
 
   #Okay first we need to calculate the number ranges from the supplied spreadsheet
   $ranges = @()
-  $onpremUsers = @()
+  $FoundonpremUsers = @()
+  $MissingonpremUsers = @()
 
-  $users | ForEach-Object 
+  Foreach ($user in $users) 
   {
-    $ranges += ($_.lineuri.substring(0,($_.lineuri.Length - 2)))
+    $ranges += ($user.lineuri.substring(5,($user.lineuri.Length - 7)))
   }
   #prune the duplicates
   $ranges = $ranges | Select-Object -Unique
@@ -87,7 +92,10 @@ if ($Step -eq 'Step0')
   Foreach ($range in $ranges)
   {
     Write-UcmLog -message "Locating Onprem Users for $range" -Severity 2
-    $return = (Search-UcmCsOnPremNumberRange -start ("$range"+"00") -end ("$range"+"99"))
+    $Start = ("$range"+"00")
+    $End = ("$range"+"99")
+
+    $return = (Search-UcmCsOnPremNumberRange -start $start -end $end -usersonly)
     If ($return.status -eq 'Error')
     {
       Write-UcmLog -message "Something went wrong pulling the number range from onprem" -Severity 3
@@ -111,29 +119,97 @@ if ($Step -eq 'Step0')
   }
   
   #Now, compare the on-prem users to the users in the CSV
+  Initialize-UcmReport -Title 'Step 0' -Subtitle 'Onprem Account Prechecks' 
+  $startTime = Get-Date 
+  $usercount = ($onpremusers.count)
+  $currentuser = 0
+
   foreach ($onpremuser in $onpremusers)
   { 
-  #This isnt effecent, but it works  ##todo was here
+  #This isnt effecent, but it works
   $currentuser ++
-  $usernametxt = $onpremuser.SipAddress #Remove the CSV header
-  
+  $usernametxt = $onpremuser.sipuri #Remove the CSV header
+  New-UCMReportItem -LineTitle 'Username' -LineMessage "$usernametxt"
   Write-Progress -Activity 'Step 1' -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
-  {
+  Write-UcmLog -message "Checking On-Prem User $usernametxt" -Severity 1
+
+  #dodgy loop to see if the user exists in the CSV
     $found = $false
     :Step0Loop foreach ($user in $users)
     {
       if ($onpremuser.LineURI -eq $user.LineURI)
       {
         $found = $true
+        New-UcmReportStep -Stepname 'CSV File' -StepResult "OK: User in CSV"
+        Write-UcmLog -message "Found!" -Severity 1
         Continue Step0Loop
       }
     }
     if ($found -eq $false)
     {
-      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) '$($onpremuser.sipaddress) not found in CSV" -Severity 3
+      New-UcmReportStep -Stepname 'CSV File' -StepResult "Error: User Not Present in CSV File!"
+      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) not found in CSV!" -Severity 3
+      $MissingonpremUsers += $onpremuser
     }
 
+    #Okay, now check the user is enabled in AD
+    $Aduser = $null
+    $Aduser = (Get-CsAdUser -Identity $usernametxt)
+
+    if ($Aduser.UserAccountControl -match 'AccountDisabled') 
+    {
+      New-UcmReportStep -Stepname 'AD Account' -StepResult 'Error: AD Account Disabled'
+      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is disabled in AD!" -Severity 3
+    }
+    else
+    {
+      New-UcmReportStep -Stepname 'AD Account' -StepResult 'OK: AD Account Enabled'
+      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is enabled in AD!" -Severity 1
+    }
     
+    #Check they are enabled in Skype
+    
+    Try
+    {
+        $CsUser = (Get-CsAdUser -Identity $onpremuser.sipuri | Get-CsUser)
+
+        if ($CsUser.enabled -eq $null) 
+        {
+          New-UcmReportStep -Stepname 'Skype Account' -StepResult 'Error: Skype Account Disabled'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is disabled in Skype!" -Severity 3
+        }
+        else
+        {
+          New-UcmReportStep -Stepname 'Skype Account' -StepResult 'OK: Skype Account Enabled'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is enabled in Skype!" -Severity 1
+        }
+
+        #and check they are homed on-prem
+        if ($CsUser.hostingprovider -NE 'SRV:')
+        {
+          New-UcmReportStep -Stepname 'S4B Account Location' -StepResult 'Error: User not homed on-prem'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is not homed on-prem!" -Severity 3
+        }
+        else
+        {
+          New-UcmReportStep -Stepname 'S4B Account Location' -StepResult 'OK: User Homed on-prem'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is homed on-prem!" -Severity 1
+        }
+    }
+    Catch
+    {
+          New-UcmReportStep -Stepname 'Skype Account' -StepResult 'Error: Not Found, Meeting Room?'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) Not Found, Meeting Room?" -Severity 3
+          New-UcmReportStep -Stepname 'S4B Account Location' -StepResult 'Error: Not Found, Meeting Room?'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) Not Found, Meeting Room?" -Severity 3
+          New-UcmReportStep -Stepname 'Skype Account' -StepResult 'Error: Not Found, Meeting Room?'
+          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) Not Found, Meeting Room?" -Severity 3
+
+    }
+
+
+
+
     #Calculate Statistics
     $elapsedTime = $(Get-Date) - $startTime 
 
@@ -143,12 +219,19 @@ if ($Step -eq 'Step0')
     $estimatedCompletionTime = $startTime + $estimatedTotalSecondsTS
     #Give us a human readable time
     $eta = ($estimatedTotalSecondsTS.ToString('hh\:mm\:ss'))
+}# end of Foreach User look
+
+# now display the results
+Write-Host 'On-Prem Users not found in CSV'
+$MissingonpremUsers | ft displayname, samaccountname, lineuri
 
 
+  New-UCMReportItem -LineTitle 'Username' -LineMessage 'Complete'
+  $finished = (Get-Date -DisplayHint Time)
+  Write-Host "Finished at $finished"
+  Export-UcmHTMLReport | Out-Null
+  Export-UcmCSVReport | Out-Null
 
-  }
-
-}
 }#end of step0
 
 If ($step -eq 'Step1')
@@ -394,6 +477,16 @@ If ($step -eq 'Step2')
       Continue Step2loop #exit foreach loop
 
     }
+    Elseif ($UserAD.UserAccountControl -match 'AccountDisabled') 
+    {
+     Write-UcmLog -message "$usernametxt has a disabled AD account" -Severity 3
+      New-UcmReportStep -Stepname 'AD Account' -StepResult 'Error: Account Disabled'
+      New-UcmReportStep -Stepname 'Skype Account Check' -StepResult 'Skipped'
+      New-UcmReportStep -Stepname 'Clear Skype Policies' -StepResult 'Skipped'
+      New-UcmReportStep -Stepname 'Move User to O365' -StepResult 'Skipped'
+      Continue Step2loop #exit foreach loop
+    }
+
     Else
     { 
       New-UcmReportStep -Stepname 'AD Account' -StepResult 'OK: AD Account Found'
@@ -468,17 +561,17 @@ If ($step -eq 'Step2')
       #Does not Support MFA!
       If ($AuthMethod -eq 'Credentials')
       {
-        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -Credential $global:StoredPsCred
+        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -Credential $global:StoredPsCred -force
       }
       #Used when we want to force O365 to use OAuth, will attempt to authenticate using SSO, then failback to a login prompt
       Elseif ($AuthMethod -eq 'OAuth')
       {
-  
+           Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -UseLegacyMode -force
       }
       #Dont specify anything in the move-Csuser cmdlet. Invokes the O365 Login prompt (supports MFA)
       Elseif ($AuthMethod -eq 'Prompt')
       {
-  
+        Move-CsUser -Identity $csuser.sipaddress -Target sipfed.online.lync.com -MoveToTeams -HostedMigrationOverrideUrl $url -Confirm:$false -ProxyPool $FrontEnd -BypassAudioConferencingCheck -force
       }
 
       New-UcmReportStep -Stepname 'Move User to O365' -StepResult 'OK'
