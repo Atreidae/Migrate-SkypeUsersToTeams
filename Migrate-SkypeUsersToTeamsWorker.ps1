@@ -95,7 +95,11 @@ if ($Step -eq 'Step0')
     $Start = ("$range"+"00")
     $End = ("$range"+"99")
 
+<<<<<<< HEAD
     $return = (Search-UcmCsOnPremNumberRange -start $start -end $end -usersonly)
+=======
+    $return = (Search-UcmCsOnPremNumberRange -start $start -end $end)
+>>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
     If ($return.status -eq 'Error')
     {
       Write-UcmLog -message "Something went wrong pulling the number range from onprem" -Severity 3
@@ -128,12 +132,18 @@ if ($Step -eq 'Step0')
   { 
   #This isnt effecent, but it works
   $currentuser ++
+<<<<<<< HEAD
   $usernametxt = $onpremuser.sipuri #Remove the CSV header
   New-UCMReportItem -LineTitle 'Username' -LineMessage "$usernametxt"
   Write-Progress -Activity 'Step 1' -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
   Write-UcmLog -message "Checking On-Prem User $usernametxt" -Severity 1
 
   #dodgy loop to see if the user exists in the CSV
+=======
+  $usernametxt = $onpremuser.SipAddress #Remove the CSV header
+  Write-Progress -Activity 'Step 1' -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
+  Write-UcmLog -message "On-Prem User $usernametxt" -Severity 2
+>>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
     $found = $false
     :Step0Loop foreach ($user in $users)
     {
@@ -147,8 +157,12 @@ if ($Step -eq 'Step0')
     }
     if ($found -eq $false)
     {
+<<<<<<< HEAD
       New-UcmReportStep -Stepname 'CSV File' -StepResult "Error: User Not Present in CSV File!"
       Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) not found in CSV!" -Severity 3
+=======
+      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) '$($onpremuser.sipaddress) not found in CSV!" -Severity 3
+>>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
       $MissingonpremUsers += $onpremuser
     }
 
@@ -220,18 +234,27 @@ if ($Step -eq 'Step0')
     #Give us a human readable time
     $eta = ($estimatedTotalSecondsTS.ToString('hh\:mm\:ss'))
 }# end of Foreach User look
+<<<<<<< HEAD
 
 # now display the results
 Write-Host 'On-Prem Users not found in CSV'
 $MissingonpremUsers | ft displayname, samaccountname, lineuri
+=======
+>>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
 
+# now display the results
+Write-Host 'On-Prem Users not found in CSV'
+$MissingonpremUsers | ft displayname, sipaddress, lineuri
 
+<<<<<<< HEAD
   New-UCMReportItem -LineTitle 'Username' -LineMessage 'Complete'
   $finished = (Get-Date -DisplayHint Time)
   Write-Host "Finished at $finished"
   Export-UcmHTMLReport | Out-Null
   Export-UcmCSVReport | Out-Null
 
+=======
+>>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
 }#end of step0
 
 If ($step -eq 'Step1')

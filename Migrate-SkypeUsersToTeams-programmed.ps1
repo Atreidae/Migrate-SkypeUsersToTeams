@@ -9,7 +9,11 @@
 $Step = "Step0" 
 
 #File we are working with?
+<<<<<<< HEAD
 $File = "C:\Kloud\Batches\25-07-24a.csv"
+=======
+$File = "C:\Users\atrei\OneDrive - Telstra\Customers\Programmed\Batches\25-07-24a.csv"
+>>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
 
 #User Type that we are migrating (Users or MeetingRooms currently supported)
 $UserType = "Users"
