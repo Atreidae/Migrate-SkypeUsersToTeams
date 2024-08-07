@@ -69,7 +69,7 @@ Catch
 if ($Step -eq 'Step0')
 {
   #Setup Reporting and Progress Bars
-  Initialize-UcmReport -Title 'Step 1' -Subtitle 'Number Range Validation' 
+  Initialize-UcmReport -Title 'Step 0' -Subtitle 'Number Range Validation' 
   $startTime = Get-Date 
   $usercount = ($users.count)
   $currentuser = 0
@@ -95,11 +95,7 @@ if ($Step -eq 'Step0')
     $Start = ("$range"+"00")
     $End = ("$range"+"99")
 
-<<<<<<< HEAD
     $return = (Search-UcmCsOnPremNumberRange -start $start -end $end -usersonly)
-=======
-    $return = (Search-UcmCsOnPremNumberRange -start $start -end $end)
->>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
     If ($return.status -eq 'Error')
     {
       Write-UcmLog -message "Something went wrong pulling the number range from onprem" -Severity 3
@@ -132,18 +128,12 @@ if ($Step -eq 'Step0')
   { 
   #This isnt effecent, but it works
   $currentuser ++
-<<<<<<< HEAD
   $usernametxt = $onpremuser.sipuri #Remove the CSV header
   New-UCMReportItem -LineTitle 'Username' -LineMessage "$usernametxt"
   Write-Progress -Activity 'Step 1' -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
   Write-UcmLog -message "Checking On-Prem User $usernametxt" -Severity 1
 
   #dodgy loop to see if the user exists in the CSV
-=======
-  $usernametxt = $onpremuser.SipAddress #Remove the CSV header
-  Write-Progress -Activity 'Step 1' -Status "User $currentuser of $usercount. $Usernametxt ETA: $eta / @ $estimatedCompletionTime" -CurrentOperation start -PercentComplete ((($currentuser) / $usercount) * 100)  
-  Write-UcmLog -message "On-Prem User $usernametxt" -Severity 2
->>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
     $found = $false
     :Step0Loop foreach ($user in $users)
     {
@@ -157,12 +147,8 @@ if ($Step -eq 'Step0')
     }
     if ($found -eq $false)
     {
-<<<<<<< HEAD
       New-UcmReportStep -Stepname 'CSV File' -StepResult "Error: User Not Present in CSV File!"
       Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) not found in CSV!" -Severity 3
-=======
-      Write-UcmLog -message "On-Prem User $($onpremuser.displayname) '$($onpremuser.sipaddress) not found in CSV!" -Severity 3
->>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
       $MissingonpremUsers += $onpremuser
     }
 
@@ -187,7 +173,7 @@ if ($Step -eq 'Step0')
     {
         $CsUser = (Get-CsAdUser -Identity $onpremuser.sipuri | Get-CsUser)
 
-        if ($CsUser.enabled -eq $null) 
+        if ($null -eq $CsUser.enabled) 
         {
           New-UcmReportStep -Stepname 'Skype Account' -StepResult 'Error: Skype Account Disabled'
           Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is disabled in Skype!" -Severity 3
@@ -201,8 +187,16 @@ if ($Step -eq 'Step0')
         #and check they are homed on-prem
         if ($CsUser.hostingprovider -NE 'SRV:')
         {
-          New-UcmReportStep -Stepname 'S4B Account Location' -StepResult 'Error: User not homed on-prem'
-          Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is not homed on-prem!" -Severity 3
+          if ($IgnoreSRVCheckWarning)
+          {
+            New-UcmReportStep -Stepname 'S4B Account Location' -StepResult 'OK: User not homed on-prem'
+            Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is not homed on-prem - Ignoring as 'IgnoreSRVCheckWarning' is True" -Severity 2
+          }
+          else
+          {
+            New-UcmReportStep -Stepname 'S4B Account Location' -StepResult 'Warning: User not homed on-prem'
+            Write-UcmLog -message "On-Prem User $($onpremuser.displayname) $($onpremuser.sipuri) is not homed on-prem!" -Severity 3
+          }
         }
         else
         {
@@ -234,27 +228,21 @@ if ($Step -eq 'Step0')
     #Give us a human readable time
     $eta = ($estimatedTotalSecondsTS.ToString('hh\:mm\:ss'))
 }# end of Foreach User look
-<<<<<<< HEAD
 
 # now display the results
 Write-Host 'On-Prem Users not found in CSV'
-$MissingonpremUsers | ft displayname, samaccountname, lineuri
-=======
->>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
+$MissingonpremUsers | Format-Table displayname, samaccountname, lineuri
 
 # now display the results
 Write-Host 'On-Prem Users not found in CSV'
-$MissingonpremUsers | ft displayname, sipaddress, lineuri
+$MissingonpremUsers | Format-Table displayname, sipaddress, lineuri
 
-<<<<<<< HEAD
   New-UCMReportItem -LineTitle 'Username' -LineMessage 'Complete'
   $finished = (Get-Date -DisplayHint Time)
   Write-Host "Finished at $finished"
   Export-UcmHTMLReport | Out-Null
   Export-UcmCSVReport | Out-Null
 
-=======
->>>>>>> f7d5f36e71a0a6d9735cd2816fd2693b173890a9
 }#end of step0
 
 If ($step -eq 'Step1')
@@ -420,7 +408,7 @@ If ($step -eq 'Step2')
   If ($AuthMethod -eq 'Credentials')
   {
     #Check we have creds in memory, if not check for cred.xml, failing that prompt the user and store them.
-    If ($Global:Config.SignInAddress -eq $null)
+    If ($null -eq $Global:Config.SignInAddress)
     {
       Write-UcmLog -Message 'No Credentials stored in Memory, checking for Creds file' -Severity 2 -Component $function
       $CredsPath = $PSCommandPath -replace 'Migrate-SkypeUsersToTeamsWorker.ps1', 'cred.xml'
@@ -489,7 +477,7 @@ If ($step -eq 'Step2')
     $UserAD = (Get-CsAdUser -Identity $usernametxt)
     $CsUser = (Get-CsAdUser -Identity $usernametxt | Get-CsUser)
     
-    If ($UserAD -eq $null) 
+    If ($null -eq $UserAD) 
 
     {
       Write-UcmLog -message "Cant find on prem $usernametxt" -Severity 3
@@ -522,7 +510,24 @@ If ($step -eq 'Step2')
     {
       Write-UcmLog -message 'User doesnt appear to be homed in Skype4B on-prem' -Severity 3
       New-UcmReportStep -Stepname 'Skype Account Check' -StepResult 'Error: User doesnt appear to be hosted on-prem'
-      New-UcmReportStep -Stepname 'Clear Skype Policies' -StepResult 'Skipped'
+
+      Try
+      {
+        Write-UcmLog -message 'Removing Skype Policies from user' -Severity 2
+        #Supress all the "We didnt change anything warnings (Store the old preference so we respect the users setting)
+        $OldWarningpref = $WarningPreference
+        $WarningPreference = 'SilentlyContinue'
+        SkypeForBusiness\Set-CsUser -Identity $csuser.sipaddress -LineURI $null -EnterpriseVoiceEnabled $False 
+        #Restore the old Warning Perference
+        $WarningPreference = $OldWarningpref
+        New-UcmReportStep -Stepname 'Clear Skype Policies' -StepResult 'OK'
+      }
+      Catch
+      {
+        New-UcmReportStep -Stepname 'Clear Skype Policies' -StepResult "Error: $error[0]"
+        Write-UcmLog -message "Something went wrong stripping Skype Policies from user $usernametxt" -Severity 3
+        Write-UcmLog -message "$Error[0]" -Severity 3
+      }
       New-UcmReportStep -Stepname 'Move User to O365' -StepResult 'Skipped'
       Continue Step2Loop
     }
@@ -569,7 +574,7 @@ If ($step -eq 'Step2')
 
 
     #Move the user to O365
-    IF ((Get-CsAdUser $usernametxt).enabled -eq $null) { Write-Warning 'User is not enabled on prem' }
+    IF ($null -eq (Get-CsAdUser $usernametxt).enabled) { Write-Warning 'User is not enabled on prem' }
 
 
     #Move user
